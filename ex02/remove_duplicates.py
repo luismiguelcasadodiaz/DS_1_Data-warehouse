@@ -13,9 +13,8 @@ def main():
         FROM customers;
             """)
     sql1 = psycopg.sql.SQL("DROP TABLE customers;")
-    #sql2 = psycopg.sql.SQL("ALTER TABLE customers_new RENAME TO customers;")
 
-    sql3 = psycopg.sql.SQL("""CREATE TABLE customers_new AS
+    sql2 = psycopg.sql.SQL("""CREATE TABLE customers AS
         SELECT event_time, event_type, product_id, price, user_id, user_session
         FROM (
             SELECT *,
@@ -23,9 +22,10 @@ def main():
                     PARTITION BY event_type, product_id, price, user_id, user_session
                     ORDER BY event_time
                 ) AS gap
-            FROM customers
+            FROM customers_new
         ) t
         WHERE gap IS NULL OR gap > interval '1 second';""")
+    sql3 = psycopg.sql.SQL("DROP TABLE customers_new;")
 
     with psycopg.connect(
         host="127.0.0.1", port=5432, dbname="piscineds", user="luicasad"
@@ -39,11 +39,12 @@ def main():
                 cur.execute(f"SELECT COUNT(*) FROM customers_new;")
                 remai = cur.fetchone()[0];
                 print(f"From {exist} records, {exist - remai} duplicates removed succesfully")
-                cur.execute(sql1)
-                cur.execute(sql3)  # removes SIMULTENEOUS records
+                cur.execute(sql1)  # deletes table customer
+                cur.execute(sql2)  # removes SIMULTENEOUS records
                 cur.execute(f"SELECT COUNT(*) FROM customers;")
                 exist = cur.fetchone()[0];
-                print(f"Additionally, {remain - exist} 'Simultaneous' records' removed succesfully")                
+                print(f"Additionally, {remai - exist} 'Simultaneous' records' removed succesfully") 
+                cur.execute(sql3)  # deletes table custoners_new
                 conn.commit()     
             except Exception as e:
                 conn.rollback()
