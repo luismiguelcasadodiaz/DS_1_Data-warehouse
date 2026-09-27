@@ -101,10 +101,18 @@ With an in-place DELETE, the deleted rows stay in the table file as dead tuples.
 
 With CREATE TABLE AS SELECT DISTINCT, the new table is written once, compactly, with no dead space. In practice this is usually faster than DELETE followed by VACUUM FULL, and the result is cleaner.
 
+### The size of customers table
+
+```sql
+SELECT pg_size_pretty(pg_relation_size('customers'));
+ pg_size_pretty 
+----------------
+ 1207 MB
+(1 row)
+```
 
 
-
-# Disk space available
+### Disk space available
 
 PostgreSql 18 stores the data in `/var/lib/postgresql/18/data`
 
@@ -125,5 +133,272 @@ Filesystem                Size      Used Available Use% Mounted on
 /dev/sda3                30.7G     10.6G     18.6G  36% /
 ```
 
+## Virtual machine available memory
+When only a sshd conection from visual studio code
+```sh
+              total        used        free      shared  buff/cache   available
+Mem:           2556         668        1146         143         743        1598
+Swap:          4096           0        4096
+```
+
+When logged with labwc GUI
+```sh
+              total        used        free      shared  buff/cache   available
+Mem:           2556         243         533         143        1780        2011
+Swap:          4096           0        4096
+```
+
+When logge with ssh
+```sh
+              total        used        free      shared  buff/cache   available
+Mem:           2556         134         562         143        1860        2122
+Swap:          4096           0        4096
+```
+
+
+This is the leanest configuration so far. With a plain SSH session (no labwc, no VS Code), only 134 MB are used and 2,122 MB are available.
+
+
+|Scenario                                        |	  Used|Available|
+|------------------------------------------------|--------|---------|
+|Plain SSH from a terminal (no graphical session)|	134 MB|	2,122 MB|
+|Local labwc session                             |	243 MB|	2,011 MB|
+|SSH from VS Code                                |	668 MB|	1,598 MB|
+
+The labwc session costs only about 110 MB, while the VS Code remote server costs over 500 MB. 
+For heavy database operations on a small VM, a plain terminal SSH session is the best option.
+
 
 EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM (SELECT DISTINCT * FROM customers);
+
+
+### The size of customers table without duplicates
+```sql
+SELECT pg_size_pretty(pg_relation_size('customers'));
+ pg_size_pretty 
+----------------
+ 1144 MB
+(1 row)
+```
+
+# Most convenient way to remove simultaneous records
+
+First identify records almost duplicated, except by the fact of had been registred in differente moments.
+I work with one that has 100 distinct entries
+```sql
+SELECT event_type, product_id, price, user_id, user_session, count(*) FROM customers GROUP BY 1,2,3,4,5 HAVING count(*) = 100 ORDER BY 6 DESC LIMIT 3;
+ event_type | product_id | price |  user_id  |             user_session             | count 
+------------+------------+-------+-----------+--------------------------------------+-------
+ cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 |   100
+ ```
+Then i show all 100 entries
+```sql
+piscineds=# SELECT * FROM customers WHERE event_type = 'cart' AND product_id = '5809912' AND price = 5.24 AND  user_id = '570030304' ORDER BY event_time ;
+```
+|       event_time           | event_type | product_id | price |  user_id  |             user_session              |
+|----------------------------|------------|------------|-------|-----------|---------------------------------------|
+|   2022-12-12 07:19:56+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:19:57+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:19:58+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:19:59+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:20:00+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:20:01+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:20:45+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:20:46+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:28:17+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:28:20+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:37:43+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:37:47+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:37:51+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:38:02+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:38:34+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:38:53+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:38:54+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:38:57+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:38:58+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:00+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:39:01+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:05+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:39:06+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:39:07+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:12+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:39:13+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:32+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:39:33+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:48+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:51+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:54+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:39:56+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:40:01+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:42:20+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:44:55+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:46:52+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:46:54+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:46:55+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 07:46:56+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:46:58+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:47:00+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:47:07+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:47:15+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:47:22+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:50:19+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:55:22+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:55:28+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 07:55:36+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:00:32+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:00:52+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:00:55+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:00:56+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:00:57+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:00:58+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:00:59+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:00+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:01+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:01:03+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:04+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:05+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:01:08+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:09+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:10+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:11+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:01:13+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:01:14+01**   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:02:47+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:02:53+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:02:57+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:03:04+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:04:39+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:04:47+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:06:15+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:06:16+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:30:50+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:30:51+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:30:52+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:30:53+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:30:55+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:30:56+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:30:58+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:30:59+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:31:00+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 08:31:01+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 08:36:51+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:05:06+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:05:11+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 09:05:12+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:05:17+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:08:21+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:12:45+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:12:46+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:18:45+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 09:38:02+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 10:00:36+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 10:04:49+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 10:04:52+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 10:07:53+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+|   2022-12-12 10:08:49+01   | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+| **2022-12-12 10:08:50+01** | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1  |
+
+At hand i selected what i have to delete. 
+
+Which SQL sentence produces same result?
+
+```sql
+FROM (
+    SELECT *,
+           event_time - LAG(event_time) OVER (
+               PARTITION BY event_type, product_id, price, user_id, user_session
+               ORDER BY event_time
+           ) AS gap
+    FROM customers
+    WHERE user_session = '08d5a2ba-7a90-4a75-b26a-d8b602da0fd1'
+      AND product_id   = 5809912
+      AND event_type   = 'cart'
+) t
+WHERE gap <= interval '1 second'
+ORDER BY event_time;
+```
+
+
+|       event_time       | event_type | product_id | price |  user_id  |             user_session             |   gap   |
+|------------------------|------------|------------|-------|-----------|--------------------------------------|---------|
+| 2022-12-12 07:19:57+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:19:58+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:19:59+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:20:00+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:20:01+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:20:46+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:38:54+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:38:58+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:39:01+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:39:06+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:39:07+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:39:13+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:39:33+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:46:55+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 07:46:56+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:00:56+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:00:57+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:00:58+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:00:59+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:00+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:01+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:04+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:05+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:09+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:10+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:11+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:01:14+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:06:16+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:30:51+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:30:52+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:30:53+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:30:56+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:30:59+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:31:00+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 08:31:01+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 09:05:12+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 09:12:46+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+| 2022-12-12 10:08:50+01 | cart       |    5809912 |  5.24 | 570030304 | 08d5a2ba-7a90-4a75-b26a-d8b602da0fd1 | 00:00:01|
+
+
+
+Which sql sentence counts records to remove from this customer?
+
+```sql
+SELECT count(*) 
+FROM (
+    SELECT *,
+           event_time - LAG(event_time) OVER (
+               PARTITION BY event_type, product_id, price, user_id, user_session
+               ORDER BY event_time
+           ) AS gap
+    FROM customers
+    WHERE user_session = '08d5a2ba-7a90-4a75-b26a-d8b602da0fd1'
+      AND product_id   = 5809912
+      AND event_type   = 'cart'
+) t
+WHERE gap <= interval '1 second';
+ count 
+-------
+    38
+(1 row)
+```
+
+which SQL sentence counts how many duplicates to remove?
+
+```sql
+piscineds=# SELECT count(*)
+FROM (
+    SELECT *,
+           event_time - LAG(event_time) OVER (
+               PARTITION BY event_type, product_id, price, user_id, user_session
+               ORDER BY event_time
+           ) AS gap
+    FROM customers
+    ) t
+WHERE gap <= interval '1 second';
+ count  
+--------
+ 329888
+(1 row)
+```
