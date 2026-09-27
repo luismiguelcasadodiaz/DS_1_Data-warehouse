@@ -1,6 +1,5 @@
 import psycopg
 import sys
-import os
 
 
 def main():
@@ -19,7 +18,8 @@ def main():
         FROM (
             SELECT *,
                 event_time - LAG(event_time) OVER (
-                    PARTITION BY event_type, product_id, price, user_id, user_session
+                    PARTITION BY event_type, product_id, price,
+                                 user_id, user_session
                     ORDER BY event_time
                 ) AS gap
             FROM customers_new
@@ -32,20 +32,22 @@ def main():
     ) as conn:
         with conn.cursor() as cur:
             try:
-                cur.execute(f"SELECT COUNT(*) FROM customers;")
-                exist = cur.fetchone()[0];
+                cur.execute("SELECT COUNT(*) FROM customers;")
+                exist = cur.fetchone()[0]
                 print(sql0.as_string(conn))
                 cur.execute(sql0)  # removes identical records
-                cur.execute(f"SELECT COUNT(*) FROM customers_new;")
-                remai = cur.fetchone()[0];
-                print(f"From {exist} records, {exist - remai} duplicates removed succesfully")
+                cur.execute("SELECT COUNT(*) FROM customers_new;")
+                remai = cur.fetchone()[0]
+                print(f"From {exist} records, {exist - remai} \
+                        duplicates removed succesfully")
                 cur.execute(sql1)  # deletes table customer
                 cur.execute(sql2)  # removes SIMULTENEOUS records
-                cur.execute(f"SELECT COUNT(*) FROM customers;")
-                exist = cur.fetchone()[0];
-                print(f"Additionally, {remai - exist} 'Simultaneous' records' removed succesfully") 
+                cur.execute("SELECT COUNT(*) FROM customers;")
+                exist = cur.fetchone()[0]
+                print(f"Additionally, {remai - exist} \
+                        'Simultaneous' records' removed succesfully")
                 cur.execute(sql3)  # deletes table custoners_new
-                conn.commit()     
+                conn.commit()
             except Exception as e:
                 conn.rollback()
                 print(f"Error removing duplicates from customers: {e}")
@@ -59,4 +61,3 @@ if __name__ == "__main__":
         print("python ./remove_duplicates.py")
         sys.exit(1)
     main()
-

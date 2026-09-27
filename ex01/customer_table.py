@@ -1,18 +1,17 @@
 import psycopg
 import sys
-import os
 
 
 def main():
     tablename = "customers"
     sql0 = psycopg.sql.SQL("""
-        SELECT EXISTS (SELECT 1 FROM information_schema.tables 
+        SELECT EXISTS (SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = {});
     """).format(psycopg.sql.Literal(tablename))
 
     sql1 = psycopg.sql.SQL("""
-        SELECT table_name FROM information_schema.tables 
-        WHERE table_schema = 'public' 
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'public'
         AND table_name ~ 'data_202[0-9]_[a-z]{3}';
     """)
     union = psycopg.sql.SQL("""
@@ -31,14 +30,14 @@ def main():
                 conn.close()
             else:
                 cur.execute(sql1)
-                tables = [ table[0] for table in cur.fetchall()]
+                tables = [table[0] for table in cur.fetchall()]
                 if not tables:
                     raise SystemExit("No se encontraron tablas con el patrón")
 
                 union = psycopg.sql.SQL(" UNION ALL ").join(
                     [psycopg.sql.SQL("SELECT * FROM {}").format(
                         psycopg.sql.Identifier(t)
-                        ) 
+                        )
                         for t in tables]
                     )
                 sql1 = psycopg.sql.SQL("CREATE TABLE customers AS ") + \
@@ -48,14 +47,15 @@ def main():
 
                 try:
                     cur.execute(sql1)
-                    print(f"Union of tables created succesfully")
-                    conn.commit()        
-                    cur.execute(f"SELECT COUNT(*) FROM customers;")
-                    rows_imported = cur.fetchone()[0];
-                    print(f"Table customers populated succesfully with {rows_imported} rows")
+                    print("Union of tables created succesfully")
+                    conn.commit()
+                    cur.execute("SELECT COUNT(*) FROM customers;")
+                    rows_imported = cur.fetchone()[0]
+                    print(f"Table customers populated succesfully \
+                            with {rows_imported} rows")
                 except Exception as e:
                     conn.rollback()
-                    print(f"Error importing {table_path}: {e}")
+                    print(f"Error creating {tablename}: {e}")
                 finally:
                     cur.close()
                     conn.close()
@@ -66,4 +66,3 @@ if __name__ == "__main__":
         print("python ./custome_table.py")
         sys.exit(1)
     main()
-
