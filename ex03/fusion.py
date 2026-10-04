@@ -21,14 +21,8 @@ def main():
         ) AS i ON c.product_id = i.product_id;
             """)
     sql1 = psycopg.sql.SQL("DROP TABLE customers;")
-    sql1 = psycopg.sql.SQL("ALTER TABLE join_customer_items RENAME TO customers;")
-
-    sql2 = psycopg.sql.SQL("""SELECT 
-            (SELECT COUNT(*) FROM customers)           AS before,
-            (SELECT COUNT(*) FROM join_customer_items) AS after;
-        """)
-    sql3 = psycopg.sql.SQL("ALTER TABLE join_customer_items RENAME TO customers;")
-    sql3 = psycopg.sql.SQL("ALTER TABLE join_customer_items RENAME TO customers;")
+    sql2 = psycopg.sql.SQL("""ALTER TABLE join_customer_items
+                           RENAME TO customers;""")
 
     with psycopg.connect(
         host="127.0.0.1", port=5432, dbname="piscineds", user="luicasad"
@@ -41,7 +35,9 @@ def main():
                 cur.execute(sql0)  # Executes join
                 cur.execute("SELECT COUNT(*) FROM join_customer_items;")
                 after = cur.fetchone()[0]
-                print(f"There were {before} records before and {after} records after join")
+                print(f"Before: {before} records. After: {after} records.")
+                cur.execute(sql1)
+                cur.execute(sql2)
                 conn.commit()
             except Exception as e:
                 conn.rollback()
